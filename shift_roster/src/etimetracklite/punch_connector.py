@@ -1,6 +1,9 @@
 """
 Fetch attendance from etimetracklite (coast) database.
-Uses AttendanceLogs (one row/employee/day) joined with Employees.
+
+Primary source : AttendanceLogs (one processed row/employee/day)
+Fallback source: DeviceLogs_{M}_{YYYY} (raw device punches for current month)
+                 used when AttendanceLogs has not yet been processed for the date.
 """
 from __future__ import annotations
 
@@ -76,24 +79,20 @@ def _to_datetime(val, date: datetime.date):
         return None
 
 
-def first_last_punches(target_date: datetime.date) -> dict:
-    """
-    Returns dict keyed by EmployeeCode:
-        { "1": {"emp_id", "emp_name", "first_in", "last_out", "all_punches"} }
-    """
-    engine = _get_engine()
+def _from_attendance_logs(target_date: datetime.date, engine) -> dict:
+    """Read from AttendanceLogs (processed attendance, one row/employee/day)."""
+    from sqlalchemy import text
     query = """
         SELECT
-            e.EmployeeCode  AS emp_id,
-            e.EmployeeName  AS emp_name,
-            a.InTime        AS first_in,
-            a.OutTime       AS last_out
+            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_id,
+            e.EmployeeName                       AS emp_name,
+            a.InTime                             AS first_in,
+            a.OutTime                            AS last_out
         FROM AttendanceLogs a
         JOIN Employees e ON e.EmployeeId = a.EmployeeId
         WHERE CAST(a.AttendanceDate AS DATE) = :target_date
     """
     summary: dict = {}
-    from sqlalchemy import text
     with engine.connect() as conn:
         result = conn.execute(text(query), {"target_date": target_date})
         for row in result.mappings():
@@ -109,12 +108,98 @@ def first_last_punches(target_date: datetime.date) -> dict:
                 "last_out":    last_out,
                 "all_punches": [t for t in [first_in, last_out] if t],
             }
-    log.info("Fetched attendance for %d employees on %s", len(summary), target_date)
+    log.info("AttendanceLogs: %d employees for %s", len(summary), target_date)
+    return summary
+
+
+def _from_device_logs(target_date: datetime.date, engine) -> dict:
+    """
+    Fallback: read raw punches from DeviceLogs_{M}_{YYYY}.
+    UserId in DeviceLogs maps to EmployeeCode in Employees.
+    AttDirection: 'in' / 'out' (or empty — then use min/max).
+    """
+    table = f"DeviceLogs_{target_date.month}_{target_date.year}"
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = :t"),
+            {"t": table},
+        ).scalar()
+        if not exists:
+            log.warning("Device log table %s not found", table)
+            return {}
+
+        query = f"""
+            SELECT
+                d.UserId      AS user_id,
+                e.EmployeeName AS emp_name,
+                d.LogDate      AS punch_time,
+                d.AttDirection AS direction
+            FROM {table} d
+            LEFT JOIN Employees e
+                   ON CAST(e.EmployeeCode AS VARCHAR(50)) = d.UserId
+                   OR e.EmployeeCodeInDevice = d.UserId
+            WHERE CAST(d.LogDate AS DATE) = :target_date
+            ORDER BY d.UserId, d.LogDate
+        """
+        result = conn.execute(text(query), {"target_date": target_date})
+
+        summary: dict = {}
+        for row in result.mappings():
+            eid = str(row["user_id"] or "").strip()
+            if not eid:
+                continue
+            if eid not in summary:
+                summary[eid] = {
+                    "emp_id":      eid,
+                    "emp_name":    str(row["emp_name"] or "").strip(),
+                    "first_in":    None,
+                    "last_out":    None,
+                    "all_punches": [],
+                }
+            rec = summary[eid]
+            pt = row["punch_time"]
+            if pt is None:
+                continue
+            rec["all_punches"].append(pt)
+
+            direction = str(row["direction"] or "").lower().strip()
+            if direction in ("in", "i", "0", "check_in"):
+                if rec["first_in"] is None or pt < rec["first_in"]:
+                    rec["first_in"] = pt
+            elif direction in ("out", "o", "1", "check_out"):
+                if rec["last_out"] is None or pt > rec["last_out"]:
+                    rec["last_out"] = pt
+
+        # Devices that don't distinguish in/out: earliest=IN, latest=OUT
+        for rec in summary.values():
+            if rec["first_in"] is None and rec["all_punches"]:
+                rec["first_in"] = min(rec["all_punches"])
+                rec["last_out"] = max(rec["all_punches"])
+
+    log.info("DeviceLogs fallback (%s): %d employees for %s", table, len(summary), target_date)
+    return summary
+
+
+def first_last_punches(target_date: datetime.date) -> dict:
+    """
+    Returns dict keyed by employee code:
+        { "12": {"emp_id", "emp_name", "first_in", "last_out", "all_punches"} }
+
+    Tries AttendanceLogs first; falls back to DeviceLogs_{M}_{YYYY} when
+    AttendanceLogs has not yet been processed for the requested date.
+    """
+    engine = _get_engine()
+    summary = _from_attendance_logs(target_date, engine)
+    if not summary:
+        log.info("AttendanceLogs empty for %s — trying DeviceLogs fallback", target_date)
+        summary = _from_device_logs(target_date, engine)
     return summary
 
 
 def fetch_punches(target_date: datetime.date) -> List[dict]:
-    """Compatibility shim — builds raw-style records from AttendanceLogs."""
+    """Compatibility shim — returns raw-style IN/OUT records."""
     rows = []
     for rec in first_last_punches(target_date).values():
         if rec["first_in"]:
