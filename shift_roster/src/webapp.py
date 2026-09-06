@@ -405,6 +405,61 @@ def pingerbot_webhook():
     })
 
 
+# ── Employee sync from ESSL ───────────────────────────────────────────────────
+
+@app.route("/api/sync-employees", methods=["POST"])
+@login_required
+def api_sync_employees():
+    """Pull employees from ESSL DB and cache them in local SQLite."""
+    try:
+        from src.etimetracklite.punch_connector import sync_employees
+        from src.db.models import Employee, get_session
+        rows = sync_employees()
+        if not rows:
+            return jsonify({"error": "No employees returned from ESSL"}), 500
+        sess = get_session()
+        try:
+            for r in rows:
+                code = r["emp_code"]
+                if not code:
+                    continue
+                emp = sess.query(Employee).filter_by(emp_code=code).first()
+                if emp:
+                    emp.emp_name   = r["emp_name"]
+                    emp.department = r["department"]
+                    emp.phone      = r["phone"]
+                    emp.synced_at  = datetime.datetime.utcnow()
+                else:
+                    sess.add(Employee(
+                        emp_code=code, emp_name=r["emp_name"],
+                        department=r["department"], phone=r["phone"],
+                    ))
+            sess.commit()
+        finally:
+            sess.close()
+        return jsonify({"synced": len(rows)})
+    except Exception as exc:
+        log.error("Employee sync error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/employees")
+@login_required
+def api_employees():
+    """Return cached employee list as JSON for the roster form."""
+    from src.db.models import Employee, get_session
+    sess = get_session()
+    try:
+        emps = sess.query(Employee).order_by(Employee.emp_code).all()
+        return jsonify([
+            {"emp_code": e.emp_code, "emp_name": e.emp_name,
+             "department": e.department or "", "phone": e.phone or ""}
+            for e in emps
+        ])
+    finally:
+        sess.close()
+
+
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.route("/settings", methods=["GET", "POST"])

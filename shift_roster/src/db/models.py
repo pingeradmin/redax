@@ -25,6 +25,19 @@ class RosterEntry(Base):
     source_msg  = Column(Text, nullable=True)   # raw WhatsApp message
 
 
+class Employee(Base):
+    """Local cache of employees synced from ESSL database."""
+    __tablename__ = "employee"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    emp_code   = Column(String(50), unique=True, nullable=False, index=True)
+    emp_name   = Column(String(150), nullable=False)
+    department = Column(String(100), nullable=True)
+    phone      = Column(String(20), nullable=True)
+    status     = Column(String(20), default="active")
+    synced_at  = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 class RosterReceiptLog(Base):
     """Audit log of every roster message received via WhatsApp."""
     __tablename__ = "roster_receipt_log"

@@ -3,14 +3,24 @@
 {% block content %}
 <div class="topbar">
   <h4 class="fw-bold mb-0"><i class="bi bi-pencil-square"></i> Enter Roster Manually</h4>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-info" onclick="syncEmployees()">
+      <i class="bi bi-arrow-repeat"></i> Sync from ESSL
+    </button>
+    <button class="btn btn-sm btn-outline-success" onclick="loadAllEmployees()">
+      <i class="bi bi-people"></i> Load All Employees
+    </button>
+  </div>
 </div>
+
+<div id="syncStatus" class="mb-2"></div>
 
 <div class="card p-4">
   <form method="post" id="rosterForm">
     <div class="row g-3 mb-4">
       <div class="col-md-4">
         <label class="form-label fw-semibold">Roster Date</label>
-        <input type="date" name="roster_date" class="form-control" value="{{ today }}" required>
+        <input type="date" name="roster_date" id="rosterDate" class="form-control" value="{{ today }}" required>
       </div>
     </div>
 
@@ -29,9 +39,7 @@
             <th></th>
           </tr>
         </thead>
-        <tbody id="rosterBody">
-          <!-- rows added by JS -->
-        </tbody>
+        <tbody id="rosterBody"></tbody>
       </table>
     </div>
 
@@ -51,20 +59,51 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const depts = ['Production','Security','Admin','HR','Maintenance','Warehouse','IT'];
+let employees = [];       // [{emp_code, emp_name, department, phone}, ...]
 const shifts = ['Morning','Afternoon','Night','General'];
 
-function makeRow() {
+// Load cached employees on page load
+fetch('/api/employees').then(r => r.json()).then(data => {
+  employees = data;
+  buildDatalist();
+});
+
+function buildDatalist() {
+  // emp_code datalist
+  let dl = document.getElementById('emp-code-list') || document.createElement('datalist');
+  dl.id = 'emp-code-list';
+  dl.innerHTML = employees.map(e => `<option value="${e.emp_code}">${e.emp_name}</option>`).join('');
+  document.body.appendChild(dl);
+  // dept datalist
+  const depts = [...new Set(employees.map(e => e.department).filter(Boolean))];
+  let dd = document.getElementById('dept-list') || document.createElement('datalist');
+  dd.id = 'dept-list';
+  dd.innerHTML = depts.map(d => `<option>${d}</option>`).join('');
+  document.body.appendChild(dd);
+}
+
+function fillRow(tr, emp) {
+  tr.querySelector('[name=emp_id]').value    = emp.emp_code;
+  tr.querySelector('[name=emp_name]').value  = emp.emp_name;
+  tr.querySelector('[name=phone]').value     = emp.phone || '';
+  tr.querySelector('[name=department]').value = emp.department || '';
+}
+
+function onEmpIdChange(input) {
+  const code = input.value.trim();
+  const emp = employees.find(e => e.emp_code === code);
+  if (emp) fillRow(input.closest('tr'), emp);
+}
+
+function makeRow(emp) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input name="emp_id" class="form-control form-control-sm" placeholder="E001"></td>
+    <td><input name="emp_id" class="form-control form-control-sm" list="emp-code-list"
+               placeholder="Code" oninput="onEmpIdChange(this)" style="min-width:80px"></td>
     <td><input name="emp_name" class="form-control form-control-sm" placeholder="Full Name" required></td>
     <td><input name="phone" class="form-control form-control-sm" placeholder="+919876543210"></td>
-    <td>
-      <input name="department" class="form-control form-control-sm" list="dept-list" placeholder="Department">
-      <datalist id="dept-list">${depts.map(d=>`<option>${d}</option>`).join('')}</datalist>
-    </td>
-    <td><input name="shift_code" class="form-control form-control-sm" placeholder="A / B / N"></td>
+    <td><input name="department" class="form-control form-control-sm" list="dept-list" placeholder="Department"></td>
+    <td><input name="shift_code" class="form-control form-control-sm" placeholder="A/B/N"></td>
     <td>
       <input name="shift_name" class="form-control form-control-sm" list="shift-list" placeholder="Morning">
       <datalist id="shift-list">${shifts.map(s=>`<option>${s}</option>`).join('')}</datalist>
@@ -73,14 +112,54 @@ function makeRow() {
     <td><input name="shift_end"   type="time" class="form-control form-control-sm"></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">✕</button></td>
   `;
+  if (emp) fillRow(tr, emp);
   return tr;
 }
 
-function addRow() {
-  document.getElementById('rosterBody').appendChild(makeRow());
+function addRow(emp) {
+  document.getElementById('rosterBody').appendChild(makeRow(emp));
 }
 
-// Start with 5 blank rows
-for (let i = 0; i < 5; i++) addRow();
+function loadAllEmployees() {
+  if (!employees.length) {
+    alert('No employees in local cache. Click "Sync from ESSL" first.');
+    return;
+  }
+  document.getElementById('rosterBody').innerHTML = '';
+  employees.forEach(e => addRow(e));
+}
+
+function syncEmployees() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing…';
+  fetch('/api/sync-employees', {method:'POST'})
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        document.getElementById('syncStatus').innerHTML =
+          `<div class="alert alert-danger">❌ ${d.error}</div>`;
+      } else {
+        employees = [];
+        fetch('/api/employees').then(r => r.json()).then(data => {
+          employees = data;
+          buildDatalist();
+        });
+        document.getElementById('syncStatus').innerHTML =
+          `<div class="alert alert-success">✅ Synced ${d.synced} employees from ESSL.</div>`;
+      }
+    })
+    .catch(() => {
+      document.getElementById('syncStatus').innerHTML =
+        '<div class="alert alert-danger">❌ Sync request failed.</div>';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync from ESSL';
+    });
+}
+
+// Start with 3 blank rows
+for (let i = 0; i < 3; i++) addRow();
 </script>
 {% endblock %}

@@ -198,6 +198,58 @@ def first_last_punches(target_date: datetime.date) -> dict:
     return summary
 
 
+def sync_employees() -> List[dict]:
+    """
+    Fetch all active employees from ESSL Employees + Departments.
+    Returns list of dicts: {emp_code, emp_name, department, phone}
+    """
+    engine = _get_engine()
+    # Try joining Departments; gracefully fall back if column name differs
+    queries = [
+        """
+        SELECT
+            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_code,
+            e.EmployeeName   AS emp_name,
+            d.DepartmentName AS department,
+            e.ContactNo      AS phone
+        FROM Employees e
+        LEFT JOIN Departments d ON d.DepartmentId = e.DepartmentId
+        WHERE e.RecordStatus = 1
+        ORDER BY e.EmployeeCode
+        """,
+        # fallback if DepartmentName column differs
+        """
+        SELECT
+            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_code,
+            e.EmployeeName AS emp_name,
+            NULL           AS department,
+            e.ContactNo    AS phone
+        FROM Employees e
+        WHERE e.RecordStatus = 1
+        ORDER BY e.EmployeeCode
+        """,
+    ]
+    from sqlalchemy import text
+    rows = []
+    with engine.connect() as conn:
+        for q in queries:
+            try:
+                result = conn.execute(text(q))
+                for row in result.mappings():
+                    rows.append({
+                        "emp_code":   str(row["emp_code"] or "").strip(),
+                        "emp_name":   str(row["emp_name"] or "").strip(),
+                        "department": str(row["department"] or "").strip(),
+                        "phone":      str(row["phone"] or "").strip(),
+                    })
+                break  # success
+            except Exception as exc:
+                log.warning("Employee query failed, trying fallback: %s", exc)
+                rows = []
+    log.info("Synced %d employees from ESSL", len(rows))
+    return rows
+
+
 def fetch_punches(target_date: datetime.date) -> List[dict]:
     """Compatibility shim — returns raw-style IN/OUT records."""
     rows = []
