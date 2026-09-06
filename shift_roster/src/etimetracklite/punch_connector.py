@@ -33,7 +33,27 @@ PUNCH_TIME_COL  = os.getenv("ESSL_PUNCH_TIME_COL", "punch_time")
 PUNCH_STATE_COL = os.getenv("ESSL_PUNCH_STATE_COL", "punch_state")  # 0=in 1=out
 
 
+def _detect_mssql_driver() -> str:
+    try:
+        import pyodbc
+        available = [d for d in pyodbc.drivers() if "SQL Server" in d]
+        for preferred in [
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+            "ODBC Driver 13 for SQL Server",
+            "SQL Server",
+        ]:
+            if preferred in available:
+                return preferred
+        if available:
+            return available[0]
+    except Exception:
+        pass
+    return "ODBC Driver 17 for SQL Server"
+
+
 def _get_engine():
+    import urllib.parse
     from sqlalchemy import create_engine
     driver = config.ETL_DB_DRIVER.lower()
     h, port, db = config.ETL_DB_HOST, config.ETL_DB_PORT, config.ETL_DB_NAME
@@ -41,15 +61,24 @@ def _get_engine():
 
     if driver == "mysql":
         url = f"mysql+pymysql://{u}:{pw}@{h}:{port}/{db}"
+        return create_engine(url, pool_pre_ping=True)
     elif driver == "mssql":
-        url = (
-            f"mssql+pyodbc://{u}:{pw}@{h}:{port}/{db}"
-            "?driver=ODBC+Driver+17+for+SQL+Server"
+        # Use odbc_connect so backslash in named-instance names (SERVER\INSTANCE)
+        # is passed verbatim to pyodbc without URL-encoding issues.
+        odbc_driver = _detect_mssql_driver()
+        conn_str = (
+            f"DRIVER={{{odbc_driver}}};"
+            f"SERVER={h};"
+            f"DATABASE={db};"
+            f"UID={u};"
+            f"PWD={pw};"
+            "TrustServerCertificate=yes;"
         )
+        log.debug("MSSQL connecting with driver=%s server=%s db=%s", odbc_driver, h, db)
+        url = f"mssql+pyodbc:///?odbc_connect={urllib.parse.quote_plus(conn_str)}"
+        return create_engine(url, pool_pre_ping=True)
     else:
         raise ValueError(f"Unsupported driver: {driver}")
-
-    return create_engine(url, pool_pre_ping=True)
 
 
 def fetch_punches(target_date: datetime.date) -> List[dict]:
