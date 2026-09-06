@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Attendance{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h4 class="fw-bold mb-0"><i class="bi bi-person-check"></i> Attendance Report</h4>
+  <div class="d-flex gap-2 align-items-center">
+    <form method="get" class="d-flex gap-2">
+      <input type="date" name="date" value="{{ date_str }}" class="form-control form-control-sm">
+      <button class="btn btn-sm btn-outline-primary">Load</button>
+    </form>
+    {% if records %}
+    <button class="btn btn-sm btn-success" onclick="notifyAll('{{ date_str }}')">
+      <i class="bi bi-whatsapp"></i> Send Report
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if not db_configured %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle"></i>
+  <strong>ESSL database not configured.</strong>
+  Add your ESSL DB credentials to the <code>.env</code> file:
+  <code>ETL_DB_HOST</code>, <code>ETL_DB_NAME</code>, <code>ETL_DB_USER</code>, <code>ETL_DB_PASSWORD</code>.
+  Set <code>ETL_DB_DRIVER=mysql</code> or <code>mssql</code>.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-danger">
+  <i class="bi bi-x-circle"></i> <strong>Database Error:</strong> {{ error }}
+  <hr class="my-2">
+  <small>Check your ESSL DB credentials in <code>.env</code> and make sure the server is reachable.</small>
+</div>
+{% endif %}
+
+{% if records %}
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center border-success">
+      <div class="fs-2 fw-bold text-success">{{ status_counts.PRESENT }}</div>
+      <div class="small text-muted">Present</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center border-warning">
+      <div class="fs-2 fw-bold text-warning">{{ status_counts.LATE }}</div>
+      <div class="small text-muted">Late</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center border-danger">
+      <div class="fs-2 fw-bold text-danger">{{ status_counts.ABSENT }}</div>
+      <div class="small text-muted">Absent</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center border-info">
+      <div class="fs-2 fw-bold text-info">{{ status_counts.EARLY_EXIT }}</div>
+      <div class="small text-muted">Early Exit</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center border-secondary">
+      <div class="fs-2 fw-bold text-secondary">{{ status_counts.HALF_DAY }}</div>
+      <div class="small text-muted">Half Day</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card p-3 text-center">
+      <div class="fs-2 fw-bold">{{ records|length }}</div>
+      <div class="small text-muted">Total</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filter tabs -->
+<ul class="nav nav-tabs mb-3" id="attTab">
+  <li class="nav-item">
+    <button class="nav-link active" onclick="filterTable('')">All ({{ records|length }})</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="filterTable('PRESENT')">✅ Present</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="filterTable('LATE')">⏰ Late</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="filterTable('ABSENT')">❌ Absent</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="filterTable('EARLY_EXIT')">🚪 Early Exit</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="filterTable('HALF_DAY')">🕐 Half Day</button>
+  </li>
+</ul>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" id="attTable">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Shift</th>
+          <th>In Time</th>
+          <th>Out Time</th>
+          <th>Worked</th>
+          <th>Status</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr data-status="{{ r.status }}">
+          <td class="text-muted small">{{ r.emp_id or '—' }}</td>
+          <td class="fw-semibold">{{ r.emp_name }}</td>
+          <td>{{ r.department or '—' }}</td>
+          <td class="small">{{ r.shift_start }}–{{ r.shift_end }}</td>
+          <td>
+            {% if r.first_in_str != '—' %}
+              <span class="{% if r.status == 'LATE' %}text-warning fw-semibold{% endif %}">
+                {{ r.first_in_str }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.last_out_str != '—' %}
+              <span class="{% if r.status == 'EARLY_EXIT' %}text-info fw-semibold{% endif %}">
+                {{ r.last_out_str }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.worked_hours }} h</td>
+          <td>
+            {% if r.status == 'PRESENT' %}
+              <span class="badge bg-success">Present</span>
+            {% elif r.status == 'LATE' %}
+              <span class="badge bg-warning text-dark">Late</span>
+            {% elif r.status == 'ABSENT' %}
+              <span class="badge bg-danger">Absent</span>
+            {% elif r.status == 'EARLY_EXIT' %}
+              <span class="badge bg-info text-dark">Early Exit</span>
+            {% elif r.status == 'HALF_DAY' %}
+              <span class="badge bg-secondary">Half Day</span>
+            {% endif %}
+          </td>
+          <td class="small text-muted">
+            {% if r.late_minutes %}+{{ r.late_minutes }} min late{% endif %}
+            {% if r.early_exit_minutes %}Left {{ r.early_exit_minutes }} min early{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif not error %}
+<div class="card p-5 text-center text-muted">
+  <i class="bi bi-calendar-x fs-1 mb-2"></i>
+  {% if db_configured %}
+  <p>No roster found for {{ target_date.strftime('%d %b %Y') }}.<br>
+  Enter a roster first, then load attendance.</p>
+  {% else %}
+  <p>Configure your ESSL database credentials in <code>.env</code> to load punch records.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<div id="notifyResult" class="mt-3"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function filterTable(status) {
+  document.querySelectorAll('#attTable tbody tr').forEach(tr => {
+    tr.style.display = (!status || tr.dataset.status === status) ? '' : 'none';
+  });
+  document.querySelectorAll('#attTab .nav-link').forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function notifyAll(date) {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending…';
+  fetch('/api/attendance-notify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date: date, notify_employees: true, notify_managers: true})
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('notifyResult').innerHTML =
+      `<div class="alert alert-success">✅ Sent: ${d.sent} | Failed: ${d.failed}</div>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-whatsapp"></i> Send Report';
+  })
+  .catch(() => {
+    document.getElementById('notifyResult').innerHTML =
+      '<div class="alert alert-danger">❌ Request failed.</div>';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-whatsapp"></i> Send Report';
+  });
+}
+</script>
+{% endblock %}

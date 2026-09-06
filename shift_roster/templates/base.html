@@ -60,8 +60,9 @@
     <a href="{{ url_for('roster_input') }}" class="nav-link {% if request.endpoint=='roster_input' %}active{% endif %}"><i class="bi bi-pencil-square"></i> Enter Roster</a>
     <a href="{{ url_for('roster_paste') }}" class="nav-link {% if request.endpoint=='roster_paste' %}active{% endif %}"><i class="bi bi-chat-text"></i> Paste / WhatsApp</a>
     <a href="{{ url_for('roster_view') }}"  class="nav-link {% if request.endpoint=='roster_view' %}active{% endif %}"><i class="bi bi-table"></i> View Roster</a>
-    <a href="{{ url_for('reports') }}"  class="nav-link {% if request.endpoint=='reports' %}active{% endif %}"><i class="bi bi-file-bar-graph"></i> Reports</a>
-    <a href="{{ url_for('settings') }}"  class="nav-link {% if request.endpoint=='settings' %}active{% endif %}"><i class="bi bi-gear"></i> Settings</a>
+    <a href="{{ url_for('reports') }}"     class="nav-link {% if request.endpoint=='reports' %}active{% endif %}"><i class="bi bi-file-bar-graph"></i> Reports</a>
+    <a href="{{ url_for('attendance') }}"  class="nav-link {% if request.endpoint=='attendance' %}active{% endif %}"><i class="bi bi-person-check"></i> Attendance</a>
+    <a href="{{ url_for('settings') }}"    class="nav-link {% if request.endpoint=='settings' %}active{% endif %}"><i class="bi bi-gear"></i> Settings</a>
   </nav>
   <div class="mt-auto p-3" style="font-size:.8rem;color:#6b7490;">
     <a href="{{ url_for('logout') }}" class="text-danger text-decoration-none"><i class="bi bi-box-arrow-right"></i> Logout</a>

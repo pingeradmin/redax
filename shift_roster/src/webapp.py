@@ -6,6 +6,8 @@ Flask web application:
   /roster/paste   → paste bulk text / WhatsApp message
   /roster/view    → view roster by date
   /reports        → generate & download reports
+  /attendance     → attendance report (roster vs actual punches from ESSL DB)
+  /api/attendance-notify → send attendance report via WhatsApp
   /webhook/pingerbot → inbound WhatsApp via Pingerbot
   /api/notify     → trigger employee notifications
 """
@@ -37,6 +39,11 @@ from src.roster.processor import (
     build_employee_message, build_full_summary, group_by_department,
 )
 from src.roster.report import text_report, whatsapp_report
+from src.roster.attendance import (
+    analyse as analyse_attendance,
+    attendance_whatsapp_report,
+    attendance_employee_message,
+)
 from src.whatsapp.pingerbot import send_message, send_bulk
 
 log = get_logger(__name__)
@@ -433,3 +440,91 @@ def settings():
         "send_time":         settings_store.get("send_time", config.SEND_TIME),
     }
     return render_template("settings.html", current=current)
+
+
+# ── Attendance Report (roster vs ESSL punches) ────────────────────────────────
+
+@app.route("/attendance")
+@login_required
+def attendance():
+    date_str = request.args.get("date", datetime.date.today().isoformat())
+    try:
+        target = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        target = datetime.date.today()
+
+    roster  = []
+    records = []
+    error   = None
+
+    try:
+        from src.db.roster_store import fetch_roster_from_db
+        roster = fetch_roster_from_db(target)
+
+        if roster:
+            from src.etimetracklite.punch_connector import first_last_punches
+            punch_summary = first_last_punches(target)
+            records = analyse_attendance(roster, punch_summary)
+    except Exception as exc:
+        error = str(exc)
+        log.error("Attendance fetch error: %s", exc)
+
+    status_counts = {
+        "PRESENT":    sum(1 for r in records if r["status"] == "PRESENT"),
+        "LATE":       sum(1 for r in records if r["status"] == "LATE"),
+        "ABSENT":     sum(1 for r in records if r["status"] == "ABSENT"),
+        "EARLY_EXIT": sum(1 for r in records if r["status"] == "EARLY_EXIT"),
+        "HALF_DAY":   sum(1 for r in records if r["status"] == "HALF_DAY"),
+    }
+
+    return render_template(
+        "attendance.html",
+        records=records,
+        status_counts=status_counts,
+        target_date=target,
+        date_str=date_str,
+        error=error,
+        db_configured=(config.ETL_DB_HOST != "localhost" or config.ETL_DB_PASSWORD != ""),
+    )
+
+
+@app.route("/api/attendance-notify", methods=["POST"])
+@login_required
+def api_attendance_notify():
+    data = request.get_json(silent=True) or {}
+    date_str = data.get("date", datetime.date.today().isoformat())
+    notify_employees = data.get("notify_employees", True)
+    notify_managers  = data.get("notify_managers", True)
+
+    try:
+        target = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"error": "invalid date"}), 400
+
+    from src.db.roster_store import fetch_roster_from_db
+    roster = fetch_roster_from_db(target)
+    if not roster:
+        return jsonify({"error": "no roster for date"}), 404
+
+    from src.etimetracklite.punch_connector import first_last_punches
+    punch_summary = first_last_punches(target)
+    records = analyse_attendance(roster, punch_summary)
+
+    messages = []
+
+    if notify_employees:
+        for rec in records:
+            phone = rec.get("phone", "").strip()
+            if phone:
+                messages.append((phone, attendance_employee_message(rec, target)))
+
+    if notify_managers:
+        summary = attendance_whatsapp_report(records, target)
+        for ph in config.MANAGER_PHONES:
+            if ph:
+                messages.append((ph, summary))
+
+    result = send_bulk(messages)
+    result["date"] = date_str
+    result["records"] = len(records)
+    return jsonify(result)
