@@ -1,4 +1,8 @@
-"""Pingerbot WhatsApp API client."""
+"""
+Pingerbot WhatsApp API client.
+API base: https://api1.pingerbot.in
+Auth:     instance_id + access_token as query params AND in body.
+"""
 from __future__ import annotations
 
 import requests
@@ -8,46 +12,53 @@ from src.logger import get_logger
 
 log = get_logger(__name__)
 
+_BASE_URL = "https://api1.pingerbot.in"
 _SESSION = requests.Session()
-_SESSION.headers.update({
-    "Authorization": f"Bearer {config.PINGERBOT_API_TOKEN}",
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-})
+_SESSION.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
 
-def send_message(phone: str, message: str) -> bool:
+def _params() -> dict:
+    return {
+        "instance_id":  config.PINGERBOT_INSTANCE_ID,
+        "access_token": config.PINGERBOT_API_TOKEN,
+    }
+
+
+def send_message(phone: str, message: str, media_url: str = "") -> bool:
     """
-    Send a WhatsApp text message via Pingerbot.
+    Send a WhatsApp direct message to a phone number.
 
     Args:
-        phone:   Recipient phone number with country code, e.g. "+919876543210"
-        message: Plain-text message body (Pingerbot supports *bold* and _italic_)
+        phone:     Recipient number (digits only or with +), e.g. "919876543210"
+        message:   Text body
+        media_url: Optional media URL for image/file
 
     Returns:
-        True on success, False on failure.
+        True on success.
     """
     if not phone or not message:
-        log.warning("send_message called with empty phone or message — skipped.")
+        log.warning("send_message: empty phone or message — skipped.")
         return False
 
-    # Normalise: remove leading + if pingerbot expects plain digits
-    # Comment out / adjust based on your pingerbot endpoint requirements.
+    # Pingerbot expects digits only (no leading +)
     clean_phone = phone.lstrip("+")
 
     payload: dict = {
-        "phone":   clean_phone,
-        "message": message,
+        "number":       clean_phone,
+        "type":         "text",
+        "message":      message,
+        "instance_id":  config.PINGERBOT_INSTANCE_ID,
+        "access_token": config.PINGERBOT_API_TOKEN,
     }
+    if media_url:
+        payload["media_url"] = media_url
+        payload["type"] = "media"
 
-    # Some pingerbot deployments require an instance/session ID
-    if config.PINGERBOT_INSTANCE_ID:
-        payload["instance_id"] = config.PINGERBOT_INSTANCE_ID
-
+    url = f"{_BASE_URL}/send_message"
     try:
-        resp = _SESSION.post(config.PINGERBOT_API_URL, json=payload, timeout=15)
+        resp = _SESSION.post(url, json=payload, params=_params(), timeout=15)
         resp.raise_for_status()
-        log.info("Sent WA message to %s | status %s", phone, resp.status_code)
+        log.info("Sent WA to %s | %s", phone, resp.status_code)
         return True
     except requests.HTTPError as exc:
         log.error("HTTP error sending to %s: %s", phone, exc)
@@ -57,26 +68,64 @@ def send_message(phone: str, message: str) -> bool:
         return False
 
 
-def send_bulk(messages: list[tuple[str, str]]) -> dict:
+def send_group_message(group_id: str, message: str, media_url: str = "") -> bool:
     """
-    Send multiple messages.
+    Send a WhatsApp message to a group.
 
     Args:
-        messages: List of (phone, message) tuples.
-
-    Returns:
-        {"sent": int, "failed": int, "failures": [phone, ...]}
+        group_id: WhatsApp group JID, e.g. "120363424270484120@g.us"
+        message:  Text body
     """
-    sent = 0
-    failed = 0
-    failures = []
+    payload: dict = {
+        "group_id":     group_id,
+        "type":         "text",
+        "message":      message,
+        "instance_id":  config.PINGERBOT_INSTANCE_ID,
+        "access_token": config.PINGERBOT_API_TOKEN,
+    }
+    if media_url:
+        payload["media_url"] = media_url
+        payload["type"] = "media"
 
+    url = f"{_BASE_URL}/send_message"
+    try:
+        resp = _SESSION.post(url, json=payload, params=_params(), timeout=15)
+        resp.raise_for_status()
+        log.info("Sent group WA to %s | %s", group_id, resp.status_code)
+        return True
+    except requests.HTTPError as exc:
+        log.error("HTTP error sending to group %s: %s", group_id, exc)
+        return False
+    except requests.RequestException as exc:
+        log.error("Network error sending to group %s: %s", group_id, exc)
+        return False
+
+
+def send_bulk(messages: list[tuple[str, str]]) -> dict:
+    """
+    Send multiple direct messages.
+
+    Args:
+        messages: List of (phone, message_text) tuples.
+    """
+    sent, failed, failures = 0, 0, []
     for phone, msg in messages:
         if send_message(phone, msg):
             sent += 1
         else:
             failed += 1
             failures.append(phone)
-
-    log.info("Bulk send complete — sent=%d failed=%d", sent, failed)
+    log.info("Bulk send — sent=%d failed=%d", sent, failed)
     return {"sent": sent, "failed": failed, "failures": failures}
+
+
+def get_groups() -> list:
+    """Fetch all WhatsApp groups for the instance."""
+    url = f"{_BASE_URL}/get_groups"
+    try:
+        resp = _SESSION.get(url, params=_params(), timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        log.error("get_groups error: %s", exc)
+        return []

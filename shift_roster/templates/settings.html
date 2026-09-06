@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h4 class="fw-bold mb-0"><i class="bi bi-gear"></i> Settings</h4>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-7">
+    <div class="card p-4">
+      <form method="post">
+
+        <h6 class="fw-semibold text-uppercase text-muted mb-3" style="font-size:.75rem;letter-spacing:.05em;">
+          Pingerbot WhatsApp Credentials
+        </h6>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Instance ID</label>
+          <input type="text" name="instance_id" class="form-control font-monospace"
+                 value="{{ current.instance_id }}" placeholder="7EA99421CD2E" required>
+          <div class="form-text">Your Pingerbot instance ID from api1.pingerbot.in</div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Access Token</label>
+          <input type="text" name="access_token" class="form-control font-monospace"
+                 value="{{ current.access_token }}" placeholder="gLm6QqsuqC" required>
+        </div>
+
+        <hr>
+        <h6 class="fw-semibold text-uppercase text-muted mb-3" style="font-size:.75rem;letter-spacing:.05em;">
+          Notification Settings
+        </h6>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Manager Phone Numbers</label>
+          <input type="text" name="manager_phones" class="form-control"
+                 value="{{ current.manager_phones }}"
+                 placeholder="+919999999999, +919888888888">
+          <div class="form-text">Comma-separated. Daily summary report is sent to these numbers.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Authorised Roster Senders</label>
+          <input type="text" name="authorized_senders" class="form-control"
+                 value="{{ current.authorized_senders }}"
+                 placeholder="+919999999999, +919888888888">
+          <div class="form-text">
+            WhatsApp numbers allowed to send roster via the bot. Leave blank to allow everyone.
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Daily Send Time</label>
+          <input type="time" name="send_time" class="form-control" style="max-width:160px"
+                 value="{{ current.send_time }}">
+          <div class="form-text">Time the scheduler sends notifications each day.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-save"></i> Save Settings
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-md-5">
+    <div class="card p-4 bg-light">
+      <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle"></i> Webhook URL</h6>
+      <p class="small text-muted mb-2">
+        Configure this URL in your Pingerbot dashboard as the <b>inbound message webhook</b>.
+        When someone sends a roster message to your WhatsApp number, Pingerbot will POST it here.
+      </p>
+      <code id="webhookUrl" class="d-block bg-white p-2 rounded border small">
+        {{ request.host_url }}webhook/pingerbot
+      </code>
+      <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyText('webhookUrl')">
+        <i class="bi bi-clipboard"></i> Copy URL
+      </button>
+    </div>
+
+    <div class="card p-4 mt-3">
+      <h6 class="fw-semibold mb-2"><i class="bi bi-chat-square-text"></i> Roster Message Formats</h6>
+      <p class="small text-muted mb-2">Send any of these formats to the WhatsApp number:</p>
+      <pre class="bg-light p-2 rounded" style="font-size:.75rem;">Roster 2024-06-15
+Alice +919876543210 Morning 06:00 14:00
+Bob +919876543211 Night 22:00 06:00</pre>
+      <pre class="bg-light p-2 rounded mt-2" style="font-size:.75rem;">ROSTER 2024-06-15
+E001|Alice|+91987...|Prod|A|Morning|06:00|14:00</pre>
+      <pre class="bg-light p-2 rounded mt-2" style="font-size:.75rem;">Roster 15-06-2024
+[Production]
+Alice +919876543210 Morning 06:00 14:00
+[Security]
+Bob +919876543211 Night 22:00 06:00</pre>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyText(id) {
+  navigator.clipboard.writeText(document.getElementById(id).innerText.trim());
+}
+</script>
+{% endblock %}

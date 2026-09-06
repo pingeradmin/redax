@@ -21,10 +21,9 @@ class Config:
     ETL_API_BASE_URL: str = os.getenv("ETL_API_BASE_URL", "")
     ETL_API_KEY: str = os.getenv("ETL_API_KEY", "")
 
-    # ── Pingerbot WhatsApp ────────────────────────────────────────────────
-    PINGERBOT_API_URL: str = os.getenv("PINGERBOT_API_URL", "")
-    PINGERBOT_API_TOKEN: str = os.getenv("PINGERBOT_API_TOKEN", "")
+    # ── Pingerbot WhatsApp (api1.pingerbot.in) ────────────────────────────
     PINGERBOT_INSTANCE_ID: str = os.getenv("PINGERBOT_INSTANCE_ID", "")
+    PINGERBOT_API_TOKEN: str = os.getenv("PINGERBOT_API_TOKEN", "")
 
     # ── Scheduler ────────────────────────────────────────────────────────
     SEND_TIME: str = os.getenv("SEND_TIME", "07:00")
@@ -34,6 +33,17 @@ class Config:
     MANAGER_PHONES: list = [
         p.strip()
         for p in os.getenv("MANAGER_PHONES", "").split(",")
+        if p.strip()
+    ]
+
+    # ── Web App ──────────────────────────────────────────────────────────
+    WEB_SECRET_KEY: str = os.getenv("WEB_SECRET_KEY", "dev-secret-change-me")
+    WEB_PORT: int = int(os.getenv("WEB_PORT", "5000"))
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    AUTHORIZED_SENDERS: list = [
+        p.strip()
+        for p in os.getenv("AUTHORIZED_SENDERS", "").split(",")
         if p.strip()
     ]
 

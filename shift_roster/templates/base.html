@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Shift Roster{% endblock %} — Pingerbot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f6fa; }
+    .sidebar {
+      min-height: 100vh;
+      background: #1a1f36;
+      color: #c8d0e7;
+      width: 230px;
+      position: fixed;
+      top: 0; left: 0;
+    }
+    .sidebar .brand {
+      padding: 1.2rem 1.5rem;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      border-bottom: 1px solid #2d3555;
+    }
+    .sidebar .nav-link {
+      color: #c8d0e7;
+      padding: .55rem 1.5rem;
+      font-size: .9rem;
+    }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active {
+      color: #fff;
+      background: #2d3555;
+      border-radius: .25rem;
+    }
+    .sidebar .nav-link i { margin-right: .5rem; }
+    .main-content { margin-left: 230px; padding: 1.5rem 2rem; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .card { border: none; border-radius: .75rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .badge-shift { background: #e8f4fd; color: #1a6fb0; border-radius: 4px; padding: 2px 8px; font-size: .82rem; }
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; min-height: auto; position: relative; }
+      .main-content { margin-left: 0; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+{% if current_user.is_authenticated %}
+<div class="sidebar d-flex flex-column">
+  <div class="brand"><i class="bi bi-calendar2-check"></i> ShiftRoster</div>
+  <nav class="nav flex-column mt-2">
+    <a href="{{ url_for('dashboard') }}"  class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}"><i class="bi bi-grid"></i> Dashboard</a>
+    <a href="{{ url_for('roster_input') }}" class="nav-link {% if request.endpoint=='roster_input' %}active{% endif %}"><i class="bi bi-pencil-square"></i> Enter Roster</a>
+    <a href="{{ url_for('roster_paste') }}" class="nav-link {% if request.endpoint=='roster_paste' %}active{% endif %}"><i class="bi bi-chat-text"></i> Paste / WhatsApp</a>
+    <a href="{{ url_for('roster_view') }}"  class="nav-link {% if request.endpoint=='roster_view' %}active{% endif %}"><i class="bi bi-table"></i> View Roster</a>
+    <a href="{{ url_for('reports') }}"  class="nav-link {% if request.endpoint=='reports' %}active{% endif %}"><i class="bi bi-file-bar-graph"></i> Reports</a>
+    <a href="{{ url_for('settings') }}"  class="nav-link {% if request.endpoint=='settings' %}active{% endif %}"><i class="bi bi-gear"></i> Settings</a>
+  </nav>
+  <div class="mt-auto p-3" style="font-size:.8rem;color:#6b7490;">
+    <a href="{{ url_for('logout') }}" class="text-danger text-decoration-none"><i class="bi bi-box-arrow-right"></i> Logout</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="{% if current_user.is_authenticated %}main-content{% else %}container py-5{% endif %}">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
+        {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
