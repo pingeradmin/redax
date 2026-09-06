@@ -12,7 +12,7 @@ from src.logger import get_logger
 
 log = get_logger(__name__)
 
-_BASE_URL = "https://api1.pingerbot.in"
+_BASE_URL = config.PINGERBOT_BASE_URL
 _SESSION = requests.Session()
 _SESSION.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 

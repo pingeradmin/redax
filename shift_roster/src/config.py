@@ -21,7 +21,8 @@ class Config:
     ETL_API_BASE_URL: str = os.getenv("ETL_API_BASE_URL", "")
     ETL_API_KEY: str = os.getenv("ETL_API_KEY", "")
 
-    # ── Pingerbot WhatsApp (api1.pingerbot.in) ────────────────────────────
+    # ── Pingerbot WhatsApp ────────────────────────────────────────────────
+    PINGERBOT_BASE_URL: str = os.getenv("PINGERBOT_BASE_URL", "https://app.pingerbot.in")
     PINGERBOT_INSTANCE_ID: str = os.getenv("PINGERBOT_INSTANCE_ID", "")
     PINGERBOT_API_TOKEN: str = os.getenv("PINGERBOT_API_TOKEN", "")
 
