@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Shift{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h4 class="mb-0"><i class="bi bi-clock"></i> {{ action }} Shift</h4>
+  <a href="{{ url_for('shifts_list') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+</div>
+
+<div class="card" style="max-width:480px;">
+  <div class="card-body">
+    <form method="post">
+      <div class="mb-3">
+        <label class="form-label">Shift Name <span class="text-danger">*</span></label>
+        <input type="text" name="name" class="form-control" value="{{ shift.name if shift else '' }}" required placeholder="e.g. Morning Shift">
+      </div>
+      <div class="row g-2">
+        <div class="col">
+          <label class="form-label">Code</label>
+          <input type="text" name="code" class="form-control" value="{{ shift.code if shift else '' }}" placeholder="e.g. A">
+        </div>
+        <div class="col">
+          <label class="form-label">Department</label>
+          <input type="text" name="department" class="form-control" value="{{ shift.department if shift else '' }}" placeholder="Optional">
+        </div>
+      </div>
+      <div class="row g-2 mt-1">
+        <div class="col">
+          <label class="form-label">Start Time <span class="text-danger">*</span></label>
+          <input type="time" name="start_time" class="form-control" value="{{ shift.start_time if shift else '08:00' }}" required>
+        </div>
+        <div class="col">
+          <label class="form-label">End Time <span class="text-danger">*</span></label>
+          <input type="time" name="end_time" class="form-control" value="{{ shift.end_time if shift else '17:00' }}" required>
+        </div>
+      </div>
+      {% if shift %}
+      <div class="mb-3 mt-3">
+        <label class="form-label">Status</label>
+        <select name="active" class="form-select">
+          <option value="1" {% if shift.active %}selected{% endif %}>Active</option>
+          <option value="0" {% if not shift.active %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      {% endif %}
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">{{ action }} Shift</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

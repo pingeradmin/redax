@@ -6,7 +6,7 @@ load_dotenv()
 
 
 class Config:
-    # ── etimetracklite ────────────────────────────────────────────────────
+    # etimetracklite
     ETL_MODE: str = os.getenv("ETL_MODE", "sql")
 
     # SQL
@@ -21,23 +21,26 @@ class Config:
     ETL_API_BASE_URL: str = os.getenv("ETL_API_BASE_URL", "")
     ETL_API_KEY: str = os.getenv("ETL_API_KEY", "")
 
-    # ── Pingerbot WhatsApp ────────────────────────────────────────────────
+    # Pingerbot WhatsApp
     PINGERBOT_BASE_URL: str = os.getenv("PINGERBOT_BASE_URL", "https://app.pingerbot.in")
     PINGERBOT_INSTANCE_ID: str = os.getenv("PINGERBOT_INSTANCE_ID", "")
     PINGERBOT_API_TOKEN: str = os.getenv("PINGERBOT_API_TOKEN", "")
 
-    # ── Scheduler ────────────────────────────────────────────────────────
+    # Scheduler
     SEND_TIME: str = os.getenv("SEND_TIME", "07:00")
     SEND_DAY_OFFSET: int = int(os.getenv("SEND_DAY_OFFSET", "0"))
 
-    # ── Report ───────────────────────────────────────────────────────────
+    # Report
     MANAGER_PHONES: list = [
         p.strip()
         for p in os.getenv("MANAGER_PHONES", "").split(",")
         if p.strip()
     ]
 
-    # ── Web App ──────────────────────────────────────────────────────────
+    # Company
+    COMPANY_NAME: str = os.getenv("COMPANY_NAME", "My Company")
+
+    # Web App
     WEB_SECRET_KEY: str = os.getenv("WEB_SECRET_KEY", "dev-secret-change-me")
     WEB_PORT: int = int(os.getenv("WEB_PORT", "5000"))
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
@@ -48,7 +51,7 @@ class Config:
         if p.strip()
     ]
 
-    # ── Logging ──────────────────────────────────────────────────────────
+    # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE: str = os.getenv("LOG_FILE", "logs/shift_roster.log")
 

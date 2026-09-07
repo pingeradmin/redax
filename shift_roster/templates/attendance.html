@@ -3,12 +3,19 @@
 {% block content %}
 <div class="topbar">
   <h4 class="fw-bold mb-0"><i class="bi bi-person-check"></i> Attendance Report</h4>
-  <div class="d-flex gap-2 align-items-center">
-    <form method="get" class="d-flex gap-2">
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <form method="get" class="d-flex gap-2 align-items-center">
       <input type="date" name="date" value="{{ date_str }}" class="form-control form-control-sm">
+      <div class="form-check form-switch mb-0 ms-1">
+        <input class="form-check-input" type="checkbox" name="office" value="1" id="officeToggle"
+          {% if include_office %}checked{% endif %}>
+        <label class="form-check-label small" for="officeToggle">Office staff</label>
+      </div>
       <button class="btn btn-sm btn-outline-primary">Load</button>
     </form>
     {% if records %}
+    <a href="{{ url_for('report_pdf_attendance', date=date_str, office='1' if include_office else '0') }}"
+       class="btn btn-sm btn-danger"><i class="bi bi-file-pdf"></i> PDF</a>
     <button class="btn btn-sm btn-success" onclick="notifyAll('{{ date_str }}')">
       <i class="bi bi-whatsapp"></i> Send Report
     </button>
@@ -36,65 +43,38 @@
 
 {% if records %}
 <!-- Summary cards -->
-<div class="row g-3 mb-4">
+<div class="row g-2 mb-4">
+  {% set card_data = [
+    ('PRESENT',    'success', 'Present'),
+    ('LATE',       'warning', 'Late'),
+    ('ABSENT',     'danger',  'Absent'),
+    ('EARLY_EXIT', 'info',    'Early Exit'),
+    ('HALF_DAY',   'secondary','Half Day'),
+    ('OFFICE',     'primary', 'Office'),
+  ] %}
+  {% for key, color, label in card_data %}
   <div class="col-6 col-md-2">
-    <div class="card p-3 text-center border-success">
-      <div class="fs-2 fw-bold text-success">{{ status_counts.PRESENT }}</div>
-      <div class="small text-muted">Present</div>
+    <div class="card p-2 text-center border-{{ color }}">
+      <div class="fs-2 fw-bold text-{{ color }}">{{ status_counts[key] }}</div>
+      <div class="small text-muted">{{ label }}</div>
     </div>
   </div>
-  <div class="col-6 col-md-2">
-    <div class="card p-3 text-center border-warning">
-      <div class="fs-2 fw-bold text-warning">{{ status_counts.LATE }}</div>
-      <div class="small text-muted">Late</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-2">
-    <div class="card p-3 text-center border-danger">
-      <div class="fs-2 fw-bold text-danger">{{ status_counts.ABSENT }}</div>
-      <div class="small text-muted">Absent</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-2">
-    <div class="card p-3 text-center border-info">
-      <div class="fs-2 fw-bold text-info">{{ status_counts.EARLY_EXIT }}</div>
-      <div class="small text-muted">Early Exit</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-2">
-    <div class="card p-3 text-center border-secondary">
-      <div class="fs-2 fw-bold text-secondary">{{ status_counts.HALF_DAY }}</div>
-      <div class="small text-muted">Half Day</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-2">
-    <div class="card p-3 text-center">
-      <div class="fs-2 fw-bold">{{ records|length }}</div>
-      <div class="small text-muted">Total</div>
-    </div>
-  </div>
+  {% endfor %}
+</div>
+<div class="text-muted small mb-3">
+  Total: <strong>{{ records|length }}</strong> employees
+  {% if include_office %} (roster + office staff){% else %} (roster only){% endif %}
 </div>
 
 <!-- Filter tabs -->
 <ul class="nav nav-tabs mb-3" id="attTab">
-  <li class="nav-item">
-    <button class="nav-link active" onclick="filterTable('')">All ({{ records|length }})</button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link" onclick="filterTable('PRESENT')">✅ Present</button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link" onclick="filterTable('LATE')">⏰ Late</button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link" onclick="filterTable('ABSENT')">❌ Absent</button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link" onclick="filterTable('EARLY_EXIT')">🚪 Early Exit</button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link" onclick="filterTable('HALF_DAY')">🕐 Half Day</button>
-  </li>
+  <li class="nav-item"><button class="nav-link active" onclick="filterTable('')">All</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('PRESENT')">Present</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('LATE')">Late</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('ABSENT')">Absent</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('EARLY_EXIT')">Early Exit</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('HALF_DAY')">Half Day</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterTable('OFFICE')">Office</button></li>
 </ul>
 
 <div class="card">
@@ -106,8 +86,10 @@
           <th>Name</th>
           <th>Department</th>
           <th>Shift</th>
-          <th>In Time</th>
-          <th>Out Time</th>
+          <th>Shift Time</th>
+          <th>In</th>
+          <th>Out</th>
+          <th>Punches</th>
           <th>Worked</th>
           <th>Status</th>
           <th>Remarks</th>
@@ -117,36 +99,43 @@
         {% for r in records %}
         <tr data-status="{{ r.status }}">
           <td class="text-muted small">{{ r.emp_id or '—' }}</td>
-          <td class="fw-semibold">{{ r.emp_name }}</td>
+          <td class="fw-semibold">
+            {{ r.emp_name }}
+            {% if not r.get('on_roster', True) %}
+            <span class="badge bg-light text-dark" title="Not on today's roster">office</span>
+            {% endif %}
+          </td>
           <td>{{ r.department or '—' }}</td>
-          <td class="small">{{ r.shift_start }}–{{ r.shift_end }}</td>
+          <td class="small">{{ r.shift_name or '—' }}</td>
+          <td class="small">
+            {% if r.shift_start %}{{ r.shift_start }}–{{ r.shift_end }}{% else %}—{% endif %}
+          </td>
           <td>
             {% if r.first_in_str != '—' %}
-              <span class="{% if r.status == 'LATE' %}text-warning fw-semibold{% endif %}">
-                {{ r.first_in_str }}
-              </span>
+              <span class="{% if r.status == 'LATE' %}text-warning fw-semibold{% endif %}">{{ r.first_in_str }}</span>
             {% else %}—{% endif %}
           </td>
           <td>
             {% if r.last_out_str != '—' %}
-              <span class="{% if r.status == 'EARLY_EXIT' %}text-info fw-semibold{% endif %}">
-                {{ r.last_out_str }}
-              </span>
+              <span class="{% if r.status == 'EARLY_EXIT' %}text-info fw-semibold{% endif %}">{{ r.last_out_str }}</span>
             {% else %}—{% endif %}
+          </td>
+          <td class="text-center small">
+            {% if r.punch_count > 2 %}
+              <span class="badge bg-light text-dark" title="Multiple punches (breaks included)">{{ r.punch_count }}</span>
+            {% else %}{{ r.punch_count }}{% endif %}
           </td>
           <td>{{ r.worked_hours }} h</td>
           <td>
-            {% if r.status == 'PRESENT' %}
-              <span class="badge bg-success">Present</span>
-            {% elif r.status == 'LATE' %}
-              <span class="badge bg-warning text-dark">Late</span>
-            {% elif r.status == 'ABSENT' %}
-              <span class="badge bg-danger">Absent</span>
-            {% elif r.status == 'EARLY_EXIT' %}
-              <span class="badge bg-info text-dark">Early Exit</span>
-            {% elif r.status == 'HALF_DAY' %}
-              <span class="badge bg-secondary">Half Day</span>
-            {% endif %}
+            <span class="badge status-{{ r.status }}">
+              {% if r.status == 'PRESENT' %}Present
+              {% elif r.status == 'LATE' %}Late
+              {% elif r.status == 'ABSENT' %}Absent
+              {% elif r.status == 'EARLY_EXIT' %}Early Exit
+              {% elif r.status == 'HALF_DAY' %}Half Day
+              {% elif r.status == 'OFFICE' %}Office
+              {% else %}{{ r.status }}{% endif %}
+            </span>
           </td>
           <td class="small text-muted">
             {% if r.late_minutes %}+{{ r.late_minutes }} min late{% endif %}
@@ -163,8 +152,7 @@
 <div class="card p-5 text-center text-muted">
   <i class="bi bi-calendar-x fs-1 mb-2"></i>
   {% if db_configured %}
-  <p>No roster found for {{ target_date.strftime('%d %b %Y') }}.<br>
-  Enter a roster first, then load attendance.</p>
+  <p>No records for {{ target_date.strftime('%d %b %Y') }}.<br>Enter a roster and ensure ESSL punch data exists.</p>
   {% else %}
   <p>Configure your ESSL database credentials in <code>.env</code> to load punch records.</p>
   {% endif %}
@@ -182,7 +170,6 @@ function filterTable(status) {
   document.querySelectorAll('#attTab .nav-link').forEach(btn => btn.classList.remove('active'));
   event.target.classList.add('active');
 }
-
 function notifyAll(date) {
   const btn = event.target;
   btn.disabled = true;
@@ -190,18 +177,19 @@ function notifyAll(date) {
   fetch('/api/attendance-notify', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date: date, notify_employees: true, notify_managers: true})
+    body: JSON.stringify({date: date, notify_employees: true, notify_managers: true,
+                          include_office: {{ 'true' if include_office else 'false' }}})
   })
   .then(r => r.json())
   .then(d => {
     document.getElementById('notifyResult').innerHTML =
-      `<div class="alert alert-success">✅ Sent: ${d.sent} | Failed: ${d.failed}</div>`;
+      `<div class="alert alert-success">Sent: ${d.sent} | Failed: ${d.failed}</div>`;
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-whatsapp"></i> Send Report';
   })
   .catch(() => {
     document.getElementById('notifyResult').innerHTML =
-      '<div class="alert alert-danger">❌ Request failed.</div>';
+      '<div class="alert alert-danger">Request failed.</div>';
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-whatsapp"></i> Send Report';
   });

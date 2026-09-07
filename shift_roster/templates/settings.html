@@ -11,6 +11,17 @@
       <form method="post">
 
         <h6 class="fw-semibold text-uppercase text-muted mb-3" style="font-size:.75rem;letter-spacing:.05em;">
+          Company
+        </h6>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Company Name</label>
+          <input type="text" name="company_name" class="form-control"
+                 value="{{ current.company_name }}" placeholder="My Company" required>
+          <div class="form-text">Appears on all PDF reports.</div>
+        </div>
+
+        <hr>
+        <h6 class="fw-semibold text-uppercase text-muted mb-3" style="font-size:.75rem;letter-spacing:.05em;">
           Pingerbot WhatsApp Credentials
         </h6>
         <div class="mb-3">

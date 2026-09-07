@@ -2,120 +2,228 @@
 {% block title %}Reports{% endblock %}
 {% block content %}
 <div class="topbar">
-  <h4 class="fw-bold mb-0"><i class="bi bi-file-bar-graph"></i> Shift Roster Reports</h4>
-  <div class="d-flex gap-2 align-items-center">
-    <form method="get" class="d-flex gap-2">
-      <input type="date" name="date" value="{{ date_str }}" class="form-control form-control-sm">
-      <button class="btn btn-sm btn-outline-primary">Generate</button>
+  <h4 class="fw-bold mb-0"><i class="bi bi-file-bar-graph"></i> Reports &amp; PDF Export</h4>
+</div>
+
+<!-- Report Type Tabs -->
+<ul class="nav nav-tabs mb-3" id="reportTypeTab">
+  <li class="nav-item">
+    <button class="nav-link {% if rtype=='daily' %}active{% endif %}" onclick="showSection('daily')">
+      <i class="bi bi-calendar-day"></i> Daily Roster
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link {% if rtype=='attendance' %}active{% endif %}" onclick="showSection('attendance')">
+      <i class="bi bi-person-check"></i> Daily Attendance
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link {% if rtype=='monthly' %}active{% endif %}" onclick="showSection('monthly')">
+      <i class="bi bi-calendar-month"></i> Monthly
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link {% if rtype=='employee' %}active{% endif %}" onclick="showSection('employee')">
+      <i class="bi bi-person-lines-fill"></i> Employee-wise
+    </button>
+  </li>
+</ul>
+
+<!-- Daily Roster Section -->
+<div id="sec-daily" class="report-section {% if rtype!='daily' %}d-none{% endif %}">
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <form method="get" class="d-flex gap-2" id="daily-form">
+      <input type="hidden" name="type" value="daily">
+      <input type="date" name="date" value="{{ date_str }}" class="form-control form-control-sm" style="width:160px">
+      <button class="btn btn-sm btn-outline-primary">Load</button>
     </form>
     {% if records %}
     <a href="{{ url_for('report_download', date=date_str) }}" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-download"></i> Download .txt
+      <i class="bi bi-download"></i> .txt
+    </a>
+    <a href="{{ url_for('report_pdf_daily', date=date_str) }}" class="btn btn-sm btn-danger">
+      <i class="bi bi-file-pdf"></i> Download PDF
     </a>
     <button class="btn btn-sm btn-success" onclick="sendNotifications('{{ date_str }}')">
-      <i class="bi bi-whatsapp"></i> Send to Managers
+      <i class="bi bi-whatsapp"></i> Notify Managers
     </button>
     {% endif %}
   </div>
+
+  {% if records %}
+  <div class="row g-3 mb-3">
+    <div class="col-sm-4">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-primary">{{ records|length }}</div>
+        <div class="text-muted small">Total Employees</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-info">{{ by_dept|length }}</div>
+        <div class="text-muted small">Departments</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-warning">
+          {{ records | selectattr('phone', 'equalto', '') | list | length }}
+        </div>
+        <div class="text-muted small">Missing Phone</div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-2" id="dailyInnerTab">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dTabTable">Table</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dTabWA">WhatsApp</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dTabText">Plain Text</button></li>
+  </ul>
+  <div class="tab-content">
+    <div class="tab-pane fade show active" id="dTabTable">
+      {% for dept, emps in by_dept.items() | sort %}
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+          <span>{{ dept }}</span><span class="badge bg-secondary">{{ emps|length }}</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr><th>ID</th><th>Name</th><th>Shift</th><th>In</th><th>Out</th><th>Phone</th></tr>
+            </thead>
+            <tbody>
+              {% for r in emps %}
+              <tr>
+                <td class="text-muted">{{ r.emp_id or '—' }}</td>
+                <td class="fw-semibold">{{ r.emp_name }}</td>
+                <td><span class="badge-shift">{{ r.shift_name or '—' }}</span></td>
+                <td>{{ r.shift_start }}</td><td>{{ r.shift_end }}</td>
+                <td class="small">{{ r.phone or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="tab-pane fade" id="dTabWA">
+      <div class="card p-3">
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="copyText('waReport')"><i class="bi bi-clipboard"></i> Copy</button>
+        </div>
+        <pre id="waReport" class="bg-light p-3 rounded" style="white-space:pre-wrap;font-size:.85rem;">{{ wa_report }}</pre>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="dTabText">
+      <div class="card p-3">
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="copyText('textReport')"><i class="bi bi-clipboard"></i> Copy</button>
+        </div>
+        <pre id="textReport" class="bg-light p-3 rounded" style="white-space:pre-wrap;font-size:.82rem;font-family:monospace;">{{ text_report }}</pre>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="card p-5 text-center text-muted">
+    <i class="bi bi-calendar-x fs-1 mb-2"></i>
+    <p>No roster found for {{ target_date.strftime('%d %b %Y') }}.</p>
+  </div>
+  {% endif %}
 </div>
 
-{% if records %}
-<!-- Summary -->
-<div class="row g-3 mb-4">
-  <div class="col-sm-4">
-    <div class="card p-3 text-center">
-      <div class="fs-2 fw-bold text-primary">{{ records|length }}</div>
-      <div class="text-muted small">Total Employees</div>
-    </div>
+<!-- Daily Attendance Section -->
+<div id="sec-attendance" class="report-section {% if rtype!='attendance' %}d-none{% endif %}">
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <input type="date" id="att-date" value="{{ date_str }}" class="form-control form-control-sm" style="width:160px">
+    <a id="att-pdf-btn" href="{{ url_for('report_pdf_attendance', date=date_str) }}" class="btn btn-sm btn-danger">
+      <i class="bi bi-file-pdf"></i> Download Attendance PDF
+    </a>
+    <a id="att-pdf-office-btn" href="{{ url_for('report_pdf_attendance', date=date_str, office='1') }}" class="btn btn-sm btn-outline-danger">
+      <i class="bi bi-file-pdf"></i> With Office Staff
+    </a>
   </div>
-  <div class="col-sm-4">
-    <div class="card p-3 text-center">
-      <div class="fs-2 fw-bold text-info">{{ by_dept|length }}</div>
-      <div class="text-muted small">Departments</div>
-    </div>
-  </div>
-  <div class="col-sm-4">
-    <div class="card p-3 text-center">
-      <div class="fs-2 fw-bold text-warning">
-        {{ records | selectattr('phone', 'equalto', '') | list | length }}
-      </div>
-      <div class="text-muted small">Missing Phone</div>
-    </div>
-  </div>
+  <script>
+  document.getElementById('att-date').addEventListener('change', function() {
+    var d = this.value;
+    document.getElementById('att-pdf-btn').href = '/reports/pdf/attendance?date=' + d;
+    document.getElementById('att-pdf-office-btn').href = '/reports/pdf/attendance?date=' + d + '&office=1';
+  });
+  </script>
+  <p class="text-muted small">Generates a PDF attendance report for the selected date. Go to the <a href="{{ url_for('attendance') }}">Attendance</a> page to view online.</p>
 </div>
 
-<!-- Tabs -->
-<ul class="nav nav-tabs mb-3" id="reportTab">
-  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabTable">Table</button></li>
-  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabWA">WhatsApp Format</button></li>
-  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabText">Plain Text</button></li>
-</ul>
-<div class="tab-content">
-
-  <div class="tab-pane fade show active" id="tabTable">
-    {% for dept, emps in by_dept.items() | sort %}
-    <div class="card mb-3">
-      <div class="card-header bg-white fw-semibold d-flex justify-content-between">
-        <span>{{ dept }}</span><span class="badge bg-secondary">{{ emps|length }}</span>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
-          <thead class="table-light">
-            <tr><th>ID</th><th>Name</th><th>Shift</th><th>In</th><th>Out</th><th>Phone</th></tr>
-          </thead>
-          <tbody>
-            {% for r in emps %}
-            <tr>
-              <td class="text-muted">{{ r.emp_id or '—' }}</td>
-              <td class="fw-semibold">{{ r.emp_name }}</td>
-              <td><span class="badge-shift">{{ r.shift_name or '—' }}</span></td>
-              <td>{{ r.shift_start }}</td><td>{{ r.shift_end }}</td>
-              <td class="small">{{ r.phone or '—' }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+<!-- Monthly Section -->
+<div id="sec-monthly" class="report-section {% if rtype!='monthly' %}d-none{% endif %}">
+  <div class="d-flex gap-2 mb-3 flex-wrap align-items-end">
+    <div>
+      <label class="form-label small mb-1">Month</label>
+      <select id="sel-month" class="form-select form-select-sm" style="width:140px">
+        {% for m in months %}
+        {% set i = loop.index %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
     </div>
-    {% endfor %}
-  </div>
-
-  <div class="tab-pane fade" id="tabWA">
-    <div class="card p-3">
-      <div class="d-flex justify-content-between mb-2">
-        <small class="text-muted">Copy this message to send via WhatsApp</small>
-        <button class="btn btn-sm btn-outline-secondary" onclick="copyText('waReport')">
-          <i class="bi bi-clipboard"></i> Copy
-        </button>
-      </div>
-      <pre id="waReport" class="bg-light p-3 rounded" style="white-space:pre-wrap;font-size:.85rem;">{{ wa_report }}</pre>
+    <div>
+      <label class="form-label small mb-1">Year</label>
+      <input type="number" id="sel-year" class="form-control form-control-sm" style="width:100px" value="{{ year }}">
     </div>
+    <button class="btn btn-sm btn-danger" onclick="downloadMonthly()">
+      <i class="bi bi-file-pdf"></i> Download Monthly PDF
+    </button>
   </div>
-
-  <div class="tab-pane fade" id="tabText">
-    <div class="card p-3">
-      <div class="d-flex justify-content-between mb-2">
-        <small class="text-muted">Plain text report</small>
-        <button class="btn btn-sm btn-outline-secondary" onclick="copyText('textReport')">
-          <i class="bi bi-clipboard"></i> Copy
-        </button>
-      </div>
-      <pre id="textReport" class="bg-light p-3 rounded" style="white-space:pre-wrap;font-size:.82rem;font-family:monospace;">{{ text_report }}</pre>
-    </div>
-  </div>
+  <p class="text-muted small">
+    Downloads a summary PDF with each employee's present/absent days and total worked hours for the selected month.
+  </p>
 </div>
 
-{% else %}
-<div class="card p-5 text-center text-muted">
-  <i class="bi bi-calendar-x fs-1 mb-2"></i>
-  <p>No roster found for {{ target_date.strftime('%d %b %Y') }}. Select a date above.</p>
+<!-- Employee-wise Section -->
+<div id="sec-employee" class="report-section {% if rtype!='employee' %}d-none{% endif %}">
+  <div class="d-flex gap-2 mb-3 flex-wrap align-items-end">
+    <div>
+      <label class="form-label small mb-1">Employee</label>
+      <select id="sel-emp" class="form-select form-select-sm" style="width:220px">
+        <option value="">-- Select --</option>
+        {% for e in emp_list %}
+        <option value="{{ e }}" {% if e == emp_name %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label small mb-1">Month</label>
+      <select id="sel-emp-month" class="form-select form-select-sm" style="width:140px">
+        {% for m in months %}
+        {% set i = loop.index %}
+        <option value="{{ i }}" {% if i == month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label small mb-1">Year</label>
+      <input type="number" id="sel-emp-year" class="form-control form-control-sm" style="width:100px" value="{{ year }}">
+    </div>
+    <button class="btn btn-sm btn-danger" onclick="downloadEmployee()">
+      <i class="bi bi-file-pdf"></i> Download Employee PDF
+    </button>
+  </div>
+  <p class="text-muted small">
+    Downloads a detailed day-by-day attendance PDF for the selected employee for the chosen month.
+  </p>
 </div>
-{% endif %}
 
 <div id="notifyResult" class="mt-3"></div>
 {% endblock %}
+
 {% block scripts %}
 <script>
+function showSection(name) {
+  document.querySelectorAll('.report-section').forEach(s => s.classList.add('d-none'));
+  document.getElementById('sec-' + name).classList.remove('d-none');
+  document.querySelectorAll('#reportTypeTab .nav-link').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
 function copyText(id) {
   navigator.clipboard.writeText(document.getElementById(id).innerText);
 }
@@ -124,12 +232,22 @@ function sendNotifications(date) {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({date: date})
-  })
-  .then(r => r.json())
-  .then(d => {
+  }).then(r => r.json()).then(d => {
     document.getElementById('notifyResult').innerHTML =
-      `<div class="alert alert-success">✅ Sent to ${d.sent} manager(s). Failed: ${d.failed}</div>`;
+      `<div class="alert alert-success">Sent to ${d.sent} recipient(s). Failed: ${d.failed}</div>`;
   });
+}
+function downloadMonthly() {
+  var m = document.getElementById('sel-month').value;
+  var y = document.getElementById('sel-year').value;
+  window.location.href = '/reports/pdf/monthly?year=' + y + '&month=' + m;
+}
+function downloadEmployee() {
+  var e = document.getElementById('sel-emp').value;
+  var m = document.getElementById('sel-emp-month').value;
+  var y = document.getElementById('sel-emp-year').value;
+  if (!e) { alert('Please select an employee.'); return; }
+  window.location.href = '/reports/pdf/employee?emp=' + encodeURIComponent(e) + '&year=' + y + '&month=' + m;
 }
 </script>
 {% endblock %}

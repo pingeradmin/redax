@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} User{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h4 class="mb-0"><i class="bi bi-person"></i> {{ action }} User</h4>
+  <a href="{{ url_for('users_list') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+</div>
+
+<div class="card" style="max-width:480px;">
+  <div class="card-body">
+    <form method="post">
+      {% if not user %}
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" name="username" class="form-control" required autofocus>
+      </div>
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control" value="{{ user.username }}" disabled>
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label">Full Name</label>
+        <input type="text" name="full_name" class="form-control" value="{{ user.full_name if user else '' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Role</label>
+        <select name="role" class="form-select">
+          {% for r in roles %}
+          <option value="{{ r }}" {% if user and user.role == r %}selected{% endif %}>{{ r|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if user %}
+      <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select name="active" class="form-select">
+          <option value="1" {% if user.active %}selected{% endif %}>Active</option>
+          <option value="0" {% if not user.active %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label">Password {% if user %}<span class="text-muted">(leave blank to keep current)</span>{% endif %}</label>
+        <input type="password" name="password" class="form-control" {% if not user %}required{% endif %} minlength="6">
+      </div>
+
+      <button type="submit" class="btn btn-primary">{{ action }} User</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h4 class="mb-0"><i class="bi bi-people"></i> User Management</h4>
+  <a href="{{ url_for('user_create') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Add User</a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th>Username</th><th>Full Name</th><th>Role</th>
+          <th>Status</th><th>Last Login</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><strong>{{ u.username }}</strong></td>
+          <td>{{ u.full_name or '—' }}</td>
+          <td>
+            {% if u.role == 'admin' %}<span class="badge bg-danger">admin</span>
+            {% elif u.role == 'manager' %}<span class="badge bg-warning text-dark">manager</span>
+            {% else %}<span class="badge bg-secondary">viewer</span>{% endif %}
+          </td>
+          <td>
+            {% if u.active %}<span class="badge bg-success">Active</span>
+            {% else %}<span class="badge bg-light text-dark">Inactive</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ u.last_login.strftime('%d %b %Y %H:%M') if u.last_login else '—' }}</td>
+          <td>
+            <a href="{{ url_for('user_edit', user_id=u.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+            {% if u.id != current_user.get_id()|int %}
+            <form method="post" action="{{ url_for('user_delete', user_id=u.id) }}" class="d-inline"
+                  onsubmit="return confirm('Delete user {{ u.username }}?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No users found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
