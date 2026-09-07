@@ -375,10 +375,21 @@ def pingerbot_webhook():
     # Save
     count = save_roster(records, message, sender)
 
-    # Auto-notify employees
+    # Auto-notify employees (look up phone from synced employee cache if missing)
+    from src.db.models import Employee, get_session as _get_session
     messages = []
     for rec in records:
         phone = rec.get("phone", "").strip()
+        if not phone:
+            try:
+                with _get_session() as _s:
+                    emp = _s.query(Employee).filter(
+                        Employee.emp_name.ilike(rec.get("emp_name", ""))
+                    ).first()
+                    if emp and emp.phone:
+                        phone = emp.phone
+            except Exception:
+                pass
         if phone:
             messages.append((phone, build_employee_message(rec)))
     for ph in config.MANAGER_PHONES:

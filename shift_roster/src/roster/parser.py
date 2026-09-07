@@ -31,14 +31,20 @@ from typing import List, Optional, Tuple
 
 _DATE_PATTERNS = [
     r"(\d{4}-\d{2}-\d{2})",                # 2024-06-15
-    r"(\d{2}[/-]\d{2}[/-]\d{4})",          # 15-06-2024 or 15/06/2024
-    r"(\d{2}[/-]\d{2}[/-]\d{2})",          # 15/06/24
+    r"(\d{2}[/\-.]\d{2}[/\-.]\d{4})",     # 15-06-2024 or 15/06/2024 or 15.06.2024
+    r"(\d{2}[/\-.]\d{2}[/\-.]\d{2})",     # 15/06/24 or 15.06.24
     r"(\d{1,2}\s+\w+\s+\d{4})",            # 15 June 2024
 ]
 
-_TIME_RE = re.compile(r"\b(\d{1,2}:\d{2})\b")
+_TIME_RE = re.compile(r"\b(\d{1,2}[:.]\d{2})\b")
 _PHONE_RE = re.compile(r"\+?\d{10,15}")
 _DEPT_HEADER_RE = re.compile(r"^\[(.+)\]$")
+
+_SHIFT_KEYWORDS = {"morning", "afternoon", "evening", "night", "general"}
+
+
+def _normalise_time(t: str) -> str:
+    return t.replace(".", ":")
 
 
 def _parse_date(text: str) -> Optional[datetime.date]:
@@ -46,8 +52,9 @@ def _parse_date(text: str) -> Optional[datetime.date]:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             raw = m.group(1)
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y",
-                        "%d/%m/%y", "%d %B %Y", "%d %b %Y"):
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y",
+                        "%d-%m-%y", "%d/%m/%y", "%d.%m.%y",
+                        "%d %B %Y", "%d %b %Y"):
                 try:
                     return datetime.datetime.strptime(raw, fmt).date()
                 except ValueError:
@@ -69,7 +76,7 @@ def _parse_pipe_row(line: str, target_date: datetime.date) -> Optional[dict]:
     parts = [p.strip() for p in line.split(sep)]
     if len(parts) < 4:
         return None
-    times = _TIME_RE.findall(line)
+    times = [_normalise_time(t) for t in _TIME_RE.findall(line)]
     return {
         "date":        target_date,
         "emp_id":      parts[0] if len(parts) > 0 else "",
@@ -85,29 +92,42 @@ def _parse_pipe_row(line: str, target_date: datetime.date) -> Optional[dict]:
 
 def _parse_simple_row(line: str, target_date: datetime.date,
                        department: str = "") -> Optional[dict]:
-    """Parse: Alice +919876543210 Morning 06:00 14:00"""
+    """Parse: Alice +919876543210 Morning 06:00 14:00
+    Also: saravana kumar morning 9.00 6.00  (no phone, dot times)
+    """
     phones = _PHONE_RE.findall(line)
-    times = _TIME_RE.findall(line)
-    if not phones or len(times) < 2:
+    times = [_normalise_time(t) for t in _TIME_RE.findall(line)]
+    if len(times) < 2:
         return None
 
-    phone = _normalise_phone(phones[0])
+    phone = _normalise_phone(phones[0]) if phones else ""
+
     # Remove phone and times from line to isolate name+shift parts
     cleaned = _PHONE_RE.sub("", line)
     cleaned = _TIME_RE.sub("", cleaned)
     # Remove separators like dash or em-dash
     cleaned = re.sub(r"[-–—|,]", " ", cleaned)
-    tokens = cleaned.split()
+    tokens = [t for t in cleaned.split() if t]
 
-    # Heuristic: name is 1-3 capitalised words at the start; rest is shift name
+    if not tokens:
+        return None
+
+    # Split on first known shift keyword; everything before is name, after is shift
     name_parts, shift_parts = [], []
-    for i, t in enumerate(tokens):
-        if t and t[0].isupper() and not shift_parts:
-            name_parts.append(t)
-        else:
+    in_shift = False
+    for t in tokens:
+        if t.lower() in _SHIFT_KEYWORDS:
+            in_shift = True
+        if in_shift:
             shift_parts.append(t)
+        else:
+            name_parts.append(t)
 
-    emp_name = " ".join(name_parts) if name_parts else "Unknown"
+    # Fallback: no shift keyword found — last token is shift name, rest is emp name
+    if not shift_parts and name_parts:
+        shift_parts = [name_parts.pop()]
+
+    emp_name = " ".join(name_parts).title() if name_parts else "Unknown"
     shift_name = " ".join(shift_parts).strip() if shift_parts else ""
 
     return {
