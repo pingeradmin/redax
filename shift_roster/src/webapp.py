@@ -16,6 +16,8 @@ from __future__ import annotations
 import datetime
 import io
 import os
+import threading
+import time
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -418,37 +420,63 @@ def pingerbot_webhook():
 
 # ── Employee sync from ESSL ───────────────────────────────────────────────────
 
+def _do_employee_sync() -> int:
+    """Pull employees from ESSL and upsert into local SQLite. Returns count."""
+    from src.etimetracklite.punch_connector import sync_employees
+    from src.db.models import Employee, get_session
+    rows = sync_employees()
+    if not rows:
+        return 0
+    sess = get_session()
+    try:
+        for r in rows:
+            code = r["emp_code"]
+            if not code:
+                continue
+            emp = sess.query(Employee).filter_by(emp_code=code).first()
+            if emp:
+                emp.emp_name   = r["emp_name"]
+                emp.department = r["department"]
+                emp.phone      = r["phone"]
+                emp.synced_at  = datetime.datetime.utcnow()
+            else:
+                sess.add(Employee(
+                    emp_code=code, emp_name=r["emp_name"],
+                    department=r["department"], phone=r["phone"],
+                ))
+        sess.commit()
+    finally:
+        sess.close()
+    return len(rows)
+
+
+def _employee_sync_loop(interval_hours: int = 4) -> None:
+    """Background thread: sync employees at startup then every interval_hours."""
+    while True:
+        try:
+            count = _do_employee_sync()
+            log.info("Auto employee sync: %d employees", count)
+        except Exception as exc:
+            log.warning("Auto employee sync failed: %s", exc)
+        time.sleep(interval_hours * 3600)
+
+
+# Start background sync thread
+_sync_thread = threading.Thread(
+    target=_employee_sync_loop, kwargs={"interval_hours": 4}, daemon=True
+)
+_sync_thread.start()
+
+
 @app.route("/api/sync-employees", methods=["POST"])
 @login_required
 def api_sync_employees():
     """Pull employees from ESSL DB and cache them in local SQLite."""
     try:
-        from src.etimetracklite.punch_connector import sync_employees
-        from src.db.models import Employee, get_session
-        rows = sync_employees()
-        if not rows:
+        count = _do_employee_sync()
+        if not count:
             return jsonify({"error": "No employees returned from ESSL"}), 500
-        sess = get_session()
-        try:
-            for r in rows:
-                code = r["emp_code"]
-                if not code:
-                    continue
-                emp = sess.query(Employee).filter_by(emp_code=code).first()
-                if emp:
-                    emp.emp_name   = r["emp_name"]
-                    emp.department = r["department"]
-                    emp.phone      = r["phone"]
-                    emp.synced_at  = datetime.datetime.utcnow()
-                else:
-                    sess.add(Employee(
-                        emp_code=code, emp_name=r["emp_name"],
-                        department=r["department"], phone=r["phone"],
-                    ))
-            sess.commit()
-        finally:
-            sess.close()
-        return jsonify({"synced": len(rows)})
+        return jsonify({"synced": count})
     except Exception as exc:
         log.error("Employee sync error: %s", exc)
         return jsonify({"error": str(exc)}), 500
