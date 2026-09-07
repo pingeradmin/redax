@@ -187,14 +187,25 @@ def first_last_punches(target_date: datetime.date) -> dict:
     Returns dict keyed by employee code:
         { "12": {"emp_id", "emp_name", "first_in", "last_out", "all_punches"} }
 
-    Tries AttendanceLogs first; falls back to DeviceLogs_{M}_{YYYY} when
-    AttendanceLogs has not yet been processed for the requested date.
+    For today: always uses DeviceLogs (real-time raw punches) because
+    AttendanceLogs is only populated after eSSL processes the day and may
+    be incomplete or empty mid-day.
+    For past dates: tries AttendanceLogs first (fully processed), falls back
+    to DeviceLogs if empty.
     """
     engine = _get_engine()
-    summary = _from_attendance_logs(target_date, engine)
-    if not summary:
-        log.info("AttendanceLogs empty for %s — trying DeviceLogs fallback", target_date)
+    today = datetime.date.today()
+    if target_date == today:
+        log.info("Today's date — reading from DeviceLogs (real-time)")
         summary = _from_device_logs(target_date, engine)
+        if not summary:
+            log.info("DeviceLogs empty for today — falling back to AttendanceLogs")
+            summary = _from_attendance_logs(target_date, engine)
+    else:
+        summary = _from_attendance_logs(target_date, engine)
+        if not summary:
+            log.info("AttendanceLogs empty for %s — trying DeviceLogs fallback", target_date)
+            summary = _from_device_logs(target_date, engine)
     return summary
 
 
