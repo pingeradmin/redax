@@ -198,55 +198,67 @@ def first_last_punches(target_date: datetime.date) -> dict:
     return summary
 
 
+def _discover_dept_name_col(conn) -> str:
+    """Return the actual name column of the Departments table, or empty string."""
+    from sqlalchemy import text
+    try:
+        result = conn.execute(text(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'Departments' ORDER BY ORDINAL_POSITION"
+        ))
+        cols = [r[0] for r in result]
+        for candidate in ("DepartmentName", "Name", "DeptName", "Dept_Name",
+                          "Description", "DepartmentDesc"):
+            if candidate in cols:
+                return candidate
+        # Last resort: any column whose name contains 'name' or 'desc'
+        for c in cols:
+            if "name" in c.lower() or "desc" in c.lower():
+                return c
+    except Exception:
+        pass
+    return ""
+
+
 def sync_employees() -> List[dict]:
     """
     Fetch all active employees from ESSL Employees + Departments.
     Returns list of dicts: {emp_code, emp_name, department, phone}
     """
     engine = _get_engine()
-    # Try joining Departments; gracefully fall back if column name differs
-    queries = [
-        """
-        SELECT
-            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_code,
-            e.EmployeeName   AS emp_name,
-            d.DepartmentName AS department,
-            e.ContactNo      AS phone
-        FROM Employees e
-        LEFT JOIN Departments d ON d.DepartmentId = e.DepartmentId
-        WHERE e.RecordStatus = 1
-        ORDER BY e.EmployeeCode
-        """,
-        # fallback if DepartmentName column differs
-        """
-        SELECT
-            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_code,
-            e.EmployeeName AS emp_name,
-            NULL           AS department,
-            e.ContactNo    AS phone
-        FROM Employees e
-        WHERE e.RecordStatus = 1
-        ORDER BY e.EmployeeCode
-        """,
-    ]
     from sqlalchemy import text
     rows = []
     with engine.connect() as conn:
-        for q in queries:
-            try:
-                result = conn.execute(text(q))
-                for row in result.mappings():
-                    rows.append({
-                        "emp_code":   str(row["emp_code"] or "").strip(),
-                        "emp_name":   str(row["emp_name"] or "").strip(),
-                        "department": str(row["department"] or "").strip(),
-                        "phone":      str(row["phone"] or "").strip(),
-                    })
-                break  # success
-            except Exception as exc:
-                log.warning("Employee query failed, trying fallback: %s", exc)
-                rows = []
-    log.info("Synced %d employees from ESSL", len(rows))
+        dept_col = _discover_dept_name_col(conn)
+        if dept_col:
+            dept_expr = f"d.{dept_col}"
+            join_clause = "LEFT JOIN Departments d ON d.DepartmentId = e.DepartmentId"
+        else:
+            dept_expr = "NULL"
+            join_clause = ""
+        q = f"""
+        SELECT
+            CAST(e.EmployeeCode AS VARCHAR(50)) AS emp_code,
+            e.EmployeeName   AS emp_name,
+            {dept_expr}      AS department,
+            e.ContactNo      AS phone
+        FROM Employees e
+        {join_clause}
+        WHERE e.RecordStatus = 1
+        ORDER BY e.EmployeeCode
+        """
+        try:
+            result = conn.execute(text(q))
+            for row in result.mappings():
+                rows.append({
+                    "emp_code":   str(row["emp_code"] or "").strip(),
+                    "emp_name":   str(row["emp_name"] or "").strip(),
+                    "department": str(row["department"] or "").strip(),
+                    "phone":      str(row["phone"] or "").strip(),
+                })
+        except Exception as exc:
+            log.error("sync_employees failed: %s", exc)
+    log.info("Synced %d employees from ESSL (dept_col=%s)", len(rows), dept_col or "none")
     return rows
 
 
