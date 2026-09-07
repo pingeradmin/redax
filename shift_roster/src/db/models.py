@@ -15,7 +15,7 @@ class RosterEntry(Base):
     roster_date = Column(Date, nullable=False, index=True)
     emp_id      = Column(String(50), nullable=False)
     emp_name    = Column(String(150), nullable=False)
-    phone       = Column(String(20), nullable=False)
+    phone       = Column(String(20), nullable=True)
     department  = Column(String(100), nullable=True)
     shift_code  = Column(String(20), nullable=True)
     shift_name  = Column(String(100), nullable=True)
