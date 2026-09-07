@@ -326,19 +326,43 @@ def pingerbot_webhook():
         ...
     }
     """
-    data = request.get_json(silent=True)
+    data = request.get_json(silent=True, force=True)
+    log.info("Pingerbot raw payload: %s", request.get_data(as_text=True)[:500])
     if not data:
         return jsonify({"status": "ignored", "reason": "no JSON body"}), 200
 
-    # Normalise field names (Pingerbot may use different keys)
-    sender  = (
-        data.get("from") or data.get("sender") or
-        data.get("phone") or data.get("waId") or ""
-    )
-    message = (
-        data.get("message") or data.get("text") or
-        data.get("body") or data.get("content") or ""
-    )
+    sender = ""
+    message = ""
+
+    # Pingerbot nested format: {"event":"messages.upsert","data":{"messages":[...]}}
+    event = data.get("event", "")
+    if event and event != "messages.upsert":
+        return jsonify({"status": "ignored", "reason": f"event={event}"}), 200
+
+    if event == "messages.upsert":
+        try:
+            msg_obj = (data.get("data") or {}).get("messages", [{}])[0]
+            if msg_obj.get("key", {}).get("fromMe"):
+                return jsonify({"status": "ignored", "reason": "outgoing"}), 200
+            sender_raw = msg_obj.get("key", {}).get("senderPn", "")
+            sender = sender_raw.split("@")[0]   # "919994447821@s.whatsapp.net" → "919994447821"
+            msg_inner = msg_obj.get("message", {})
+            message = (
+                msg_inner.get("conversation") or
+                (msg_inner.get("extendedTextMessage") or {}).get("text", "")
+            )
+        except (KeyError, IndexError, TypeError):
+            return jsonify({"status": "ignored", "reason": "unreadable structure"}), 200
+    else:
+        # Flat / legacy format
+        sender = (
+            data.get("from") or data.get("sender") or
+            data.get("phone") or data.get("waId") or ""
+        )
+        message = (
+            data.get("message") or data.get("text") or
+            data.get("body") or data.get("content") or ""
+        )
 
     if not sender or not message:
         return jsonify({"status": "ignored", "reason": "missing sender or message"}), 200
